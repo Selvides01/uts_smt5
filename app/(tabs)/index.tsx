@@ -1,33 +1,78 @@
-// App.tsx
-import React, { useState } from 'react';
-import { View, TextInput, Button, FlatList, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, TextInput, Button, FlatList, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 
 const App = () => {
   const [text, setText] = useState<string>('');
-  const [items, setItems] = useState<string[]>([]);
-  const [editIndex, setEditIndex] = useState<number | null>(null);
+  const [items, setItems] = useState<{ id: number; title: string }[]>([]);
+  const [editId, setEditId] = useState<number | null>(null);
 
-  const addItem = () => {
+  useEffect(() => {
+    fetchItems();
+  }, []);
+
+  const fetchItems = async () => {
+    try {
+      const response = await fetch('https://api.example.com/items'); // Replace with your API endpoint
+      const data = await response.json();
+      setItems(data);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to fetch items');
+    }
+  };
+
+  const addItem = async () => {
     if (text.trim() === '') return;
 
-    if (editIndex !== null) {
-      const updatedItems = items.map((item, index) => (index === editIndex ? text : item));
-      setItems(updatedItems);
-      setEditIndex(null);
+    if (editId !== null) {
+      const updatedItem = { id: editId, title: text };
+      try {
+        const response = await fetch(`https://api.example.com/items/${editId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedItem),
+        });
+        if (response.ok) {
+          setItems((prevItems) =>
+            prevItems.map((item) => (item.id === editId ? updatedItem : item))
+          );
+          setEditId(null);
+        }
+      } catch (error) {
+        Alert.alert('Error', 'Failed to update item');
+      }
     } else {
-      setItems([...items, text]);
+      try {
+        const response = await fetch('https://api.example.com/items', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: text }),
+        });
+        const newItem = await response.json();
+        setItems((prevItems) => [...prevItems, newItem]);
+      } catch (error) {
+        Alert.alert('Error', 'Failed to add item');
+      }
     }
+
     setText('');
   };
 
-  const editItem = (index: number) => {
-    setText(items[index]);
-    setEditIndex(index);
+  const editItem = (id: number, title: string) => {
+    setText(title);
+    setEditId(id);
   };
 
-  const deleteItem = (index: number) => {
-    const updatedItems = items.filter((_, i) => i !== index);
-    setItems(updatedItems);
+  const deleteItem = async (id: number) => {
+    try {
+      const response = await fetch(`https://api.example.com/items/${id}`, {
+        method: 'DELETE',
+      });
+      if (response.ok) {
+        setItems((prevItems) => prevItems.filter((item) => item.id !== id));
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to delete item');
+    }
   };
 
   return (
@@ -38,18 +83,18 @@ const App = () => {
         value={text}
         onChangeText={setText}
       />
-      <Button title={editIndex !== null ? 'Update' : 'Add'} onPress={addItem} />
+      <Button title={editId !== null ? 'Update' : 'Add'} onPress={addItem} />
       <FlatList
         data={items}
-        keyExtractor={(item, index) => index.toString()}
-        renderItem={({ item, index }) => (
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={({ item }) => (
           <View style={styles.itemContainer}>
-            <Text>{item}</Text>
+            <Text>{item.title}</Text>
             <View style={styles.buttons}>
-              <TouchableOpacity onPress={() => editItem(index)}>
+              <TouchableOpacity onPress={() => editItem(item.id, item.title)}>
                 <Text style={styles.editButton}>Edit</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => deleteItem(index)}>
+              <TouchableOpacity onPress={() => deleteItem(item.id)}>
                 <Text style={styles.deleteButton}>Delete</Text>
               </TouchableOpacity>
             </View>
@@ -84,8 +129,7 @@ const styles = StyleSheet.create({
   },
   editButton: {
     color: 'blue',
-    marginRight: 10, 
-    
+    marginRight: 10,
   },
   deleteButton: {
     color: 'red',
